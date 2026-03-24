@@ -2,57 +2,53 @@ package main
 
 import (
 	"context"
-	"log"
-	"log/slog"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/Sudhanshu-NITR/Kortex/internal/api"
+	"github.com/Sudhanshu-NITR/Kortex/internal/app"
 	"github.com/Sudhanshu-NITR/Kortex/internal/config"
+	"github.com/Sudhanshu-NITR/Kortex/internal/logger"
 )
 
 func main() {
-	// load Config
+
 	cfg := config.MustLoad()
 
-	// setup router
-	router := http.NewServeMux()
+	log := logger.New(cfg.Env)
 
-	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Welcome to Semantic-Code Agent"))
-	})
+	router := api.NewRouter(log)
 
-	// setup server
-	server := http.Server{
-		Addr:    cfg.HTTPServer.Addr,
-		Handler: router,
-	}
-
-	slog.Info("Server started at", slog.String("address", cfg.HTTPServer.Addr))
-
-	done := make(chan os.Signal, 1)
-
-	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	server := app.NewHTTPServer(cfg.HTTPServer, router)
 
 	go func() {
-		err := server.ListenAndServe()
-		if err != nil {
-			log.Fatal("Failed to start the server")
+		log.Info("starting server", "addr", server.Addr)
+
+		if err := server.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+
+			log.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
-	<-done
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	slog.Info("shutting down the server...")
+	<-stop
+	log.Info("shutdown signal received")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		slog.Error("Failed to shutdown server", slog.String("error", err.Error()))
+		log.Error("graceful shutdown failed", "error", err)
 	}
 
-	slog.Info("server shutdown successfully")
+	log.Info("server stopped")
+
 }
