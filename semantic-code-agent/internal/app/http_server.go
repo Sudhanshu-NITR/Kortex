@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Sudhanshu-NITR/Kortex/internal/config"
+	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/config"
 )
 
 func NewHTTPServer(cfg config.HTTPServer, handler http.Handler) *http.Server {

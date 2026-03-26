@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sudhanshu-NITR/Kortex/internal/api"
-	"github.com/Sudhanshu-NITR/Kortex/internal/app"
-	"github.com/Sudhanshu-NITR/Kortex/internal/config"
-	"github.com/Sudhanshu-NITR/Kortex/internal/logger"
+	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/api"
+	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/app"
+	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/config"
+	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/logger"
 )
 
 func main() {

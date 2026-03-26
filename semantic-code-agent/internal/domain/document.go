@@ -15,7 +15,7 @@ type Document struct {
 // Chunk represents a semantic segment of a Document (e.g., a function)
 type Chunk struct {
 	ID         string
-	DocumentId string
+	DocumentID string
 	Content    string
 	StartLine  int
 	EndLine    int
