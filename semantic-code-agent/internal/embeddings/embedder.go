@@ -44,8 +44,8 @@ func (e *APIEmbedder) EmbedChunks(ctx context.Context, chunks []domain.Chunk) ([
 	e.logger.Info("Generating embeddings", slog.Int("chunk_count", len(chunks)), slog.String("model", e.Model))
 
 	var texts []string
-	for _, chunks := range chunks {
-		texts = append(texts, chunks.Content)
+	for _, chunk := range chunks {
+		texts = append(texts, chunk.Content)
 	}
 
 	// Payload matching standard OpenAI / open-source API formats
@@ -63,7 +63,7 @@ func (e *APIEmbedder) EmbedChunks(ctx context.Context, chunks []domain.Chunk) ([
 
 	req.Header.Set("Content-Type", "application/json")
 	if e.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer"+e.APIKey)
+		req.Header.Set("Authorization", "Bearer "+e.APIKey)
 	}
 
 	resp, err := e.Client.Do(req)

@@ -26,7 +26,7 @@ func NewPgVectorStore(logger *slog.Logger) *PgVectorStore {
 }
 
 // Upsert inserts or updates chunks and their embeddings in the database.
-func (s *PgVectorStore) Uspert(ctx context.Context, chunks []domain.Chunk) error {
+func (s *PgVectorStore) Upsert(ctx context.Context, chunks []domain.Chunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}

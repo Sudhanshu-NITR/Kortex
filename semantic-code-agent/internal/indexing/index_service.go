@@ -42,7 +42,7 @@ func (s *IndexService) IndexRepository(ctx context.Context, repoPath string) err
 	// 1. Load source files
 	docs, err := s.loader.Load(repoPath)
 	if err != nil {
-		return fmt.Errorf("failed tp load repository: %w", err)
+		return fmt.Errorf("failed to load repository: %w", err)
 	}
 
 	var allChunks []domain.Chunk
@@ -61,7 +61,7 @@ func (s *IndexService) IndexRepository(ctx context.Context, repoPath string) err
 
 	// 3. Generate embeddings in batches (e.g., 100 chunks at a time to prevent API )
 	batchSize := 100
-	for i := 0; i < len(batchSize); i += batchSize {
+	for i := 0; i < len(allChunks); i += batchSize {
 		end := i + batchSize
 		if end > len(allChunks) {
 			end = len(allChunks)
