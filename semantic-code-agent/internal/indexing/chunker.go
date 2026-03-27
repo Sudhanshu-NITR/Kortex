@@ -7,6 +7,7 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/golang"
+	"github.com/smacker/go-tree-sitter/javascript"
 	"github.com/smacker/go-tree-sitter/python"
 
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/domain"
@@ -35,6 +36,8 @@ func (c *ASTChunker) Chunk(ctx context.Context, doc domain.Document) ([]domain.C
 		parser.SetLanguage(golang.GetLanguage())
 	case "python", "py":
 		parser.SetLanguage(python.GetLanguage())
+	case "js", "jsx":
+		parser.SetLanguage(javascript.GetLanguage())
 	default:
 		c.logger.Debug("Using fallback chunking", slog.String("file", doc.FilePath))
 		return c.fallbackChunking(doc), nil

@@ -1,99 +1,100 @@
 package embeddings
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/domain"
+	"google.golang.org/genai"
 )
 
 // Embedder defines the interface for generating vector embeddings.
 type Embedder interface {
 	EmbedChunks(ctx context.Context, chunks []domain.Chunk) ([]domain.Chunk, error)
+	EmbedQuery(ctx context.Context, query string) ([]float32, error)
 }
 
-// APIEmbedder implements Embedder by calling an external API.
-type APIEmbedder struct {
-	Endpoint string
-	APIKey   string
-	Model    string
-	Client   *http.Client
-	logger   *slog.Logger
+// GeminiEmbedder implements Embedder using the official Google GenAI Go SDK.
+type GeminiEmbedder struct {
+	client *genai.Client
+	model  string
+	logger *slog.Logger
 }
 
-func NewAPIEmbedder(endpoint, apiKey, model string, logger *slog.Logger) *APIEmbedder {
-	return &APIEmbedder{
-		Endpoint: endpoint,
-		APIKey:   apiKey,
-		Model:    model,
-		Client:   &http.Client{},
-		logger:   logger,
+func NewGeminiEmbedder(client *genai.Client, model string, logger *slog.Logger) *GeminiEmbedder {
+	return &GeminiEmbedder{
+		client: client,
+		model:  model,
+		logger: logger,
 	}
 }
 
-// EmbedChunks calls the API to generate embeddings and populates the Chunk structs.
-func (e *APIEmbedder) EmbedChunks(ctx context.Context, chunks []domain.Chunk) ([]domain.Chunk, error) {
+// EmbedChunks calls the Gemini API to generate embeddings and populates the Chunk structs.
+func (e *GeminiEmbedder) EmbedChunks(ctx context.Context, chunks []domain.Chunk) ([]domain.Chunk, error) {
 	if len(chunks) == 0 {
 		return chunks, nil
 	}
 
-	e.logger.Info("Generating embeddings", slog.Int("chunk_count", len(chunks)), slog.String("model", e.Model))
+	e.logger.Info("Generating embeddings with Gemini", slog.Int("chunk_count", len(chunks)), slog.String("model", e.model))
 
-	var texts []string
+	var contents []*genai.Content
 	for _, chunk := range chunks {
-		texts = append(texts, chunk.Content)
+		// Prepare the content structure expected by GenAI EmbedContent
+		contents = append(contents, &genai.Content{
+			Parts: []*genai.Part{
+				genai.NewPartFromText(chunk.Content),
+			},
+		})
 	}
 
-	// Payload matching standard OpenAI / open-source API formats
-	payload := map[string]interface{}{
-		"input": texts,
-		"model": e.Model,
+	// Make the API request to Gemini
+	dim := int32(768)
+	config := &genai.EmbedContentConfig{
+		TaskType:             "RETRIEVAL_DOCUMENT",
+		OutputDimensionality: &dim,
 	}
-
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", e.Endpoint, bytes.NewBuffer(body))
+	resp, err := e.client.Models.EmbedContent(ctx, e.model, contents, config)
 	if err != nil {
-		e.logger.Error("Failed to create request", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		e.logger.Error("Gemini EmbedContent API request failed", slog.Any("error", err))
+		return nil, fmt.Errorf("gemini api request failed: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	if e.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.APIKey)
+	if len(resp.Embeddings) != len(chunks) {
+		return nil, fmt.Errorf("embedding mismatch: expected %d embeddings, got %d", len(chunks), len(resp.Embeddings))
 	}
 
-	resp, err := e.Client.Do(req)
-	if err != nil {
-		e.logger.Error("API request failed", slog.Any("error", err))
-		return nil, fmt.Errorf("API request failed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		e.logger.Error("API returned non-OK status", slog.Int("status", resp.StatusCode))
-		return nil, fmt.Errorf("API returned status: %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		e.logger.Error("Failed to decode response", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	e.logger.Info("Successfully generated embeddings", slog.Int("chunk_count", len(chunks)))
+	e.logger.Info("Successfully generated Gemini embeddings", slog.Int("chunk_count", len(chunks)))
 	for i := range chunks {
-		chunks[i].Embedding = result.Data[i].Embedding
+		chunks[i].Embedding = resp.Embeddings[i].Values
 	}
 
 	return chunks, nil
+}
+
+// EmbedQuery calls the Gemini API to generate an embedding optimized for retrieval query.
+func (e *GeminiEmbedder) EmbedQuery(ctx context.Context, query string) ([]float32, error) {
+	e.logger.Info("Generating query embedding with Gemini", slog.String("model", e.model))
+
+	contents := []*genai.Content{{
+		Parts: []*genai.Part{
+			genai.NewPartFromText(query),
+		},
+	}}
+
+	dim := int32(768)
+	config := &genai.EmbedContentConfig{
+		TaskType:             "RETRIEVAL_QUERY",
+		OutputDimensionality: &dim,
+	}
+	resp, err := e.client.Models.EmbedContent(ctx, e.model, contents, config)
+	if err != nil {
+		e.logger.Error("Gemini EmbedContent API request failed for query", slog.Any("error", err))
+		return nil, fmt.Errorf("gemini api request failed for query: %w", err)
+	}
+	if len(resp.Embeddings) == 0 {
+		return nil, fmt.Errorf("no embedding returned for query")
+	}
+
+	return resp.Embeddings[0].Values, nil
 }

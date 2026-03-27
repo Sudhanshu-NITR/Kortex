@@ -79,10 +79,21 @@ func (s *IndexService) IndexRepository(ctx context.Context, repoPath string) err
 		}
 	}
 
-	// 4. Store in Vector Database
-	if err := s.store.Upsert(ctx, allChunks); err != nil {
-		s.logger.Error("Failed to upsert chunks to vector db", slog.Any("error", err))
-		return fmt.Errorf("Failed to upsert chunks: %w", err)
+	// 4. Store in Vector Database (only valid embedded chunks)
+	var validChunks []domain.Chunk
+	for _, chunk := range allChunks {
+		if len(chunk.Embedding) > 0 {
+			validChunks = append(validChunks, chunk)
+		}
+	}
+
+	if len(validChunks) > 0 {
+		if err := s.store.Upsert(ctx, validChunks); err != nil {
+			s.logger.Error("Failed to upsert chunks to vector db", slog.Any("error", err))
+			return fmt.Errorf("Failed to upsert chunks: %w", err)
+		}
+	} else {
+		s.logger.Warn("No valid chunks with embeddings to upsert")
 	}
 
 	s.logger.Info("Successfully completed repository indexing")

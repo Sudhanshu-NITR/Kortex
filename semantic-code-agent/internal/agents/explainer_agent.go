@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/domain"
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/embeddings"
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/vectordb"
 	"google.golang.org/adk/agent"
@@ -41,14 +40,16 @@ func CreateCodeExplanationAgent(
 		logger.Info("Agent triggered tool: searching vector DB", slog.String("query", args.Query))
 
 		// Embed the query
-		queryChunks, err := embedder.EmbedChunks(ctx, []domain.Chunk{{Content: args.Query}})
-		if err != nil || len(queryChunks) == 0 {
+		queryEmbedding, err := embedder.EmbedQuery(tctx, args.Query)
+		if err != nil {
+			logger.Error("Tool failed during EmbedQuery", slog.Any("error", err))
 			return SearchVectorStoreResults{Error: "failed to embed query"}, nil
 		}
 
 		// Search the store (getting top 5 chunks)
-		results, err := store.Search(ctx, queryChunks[0].Embedding, 5)
+		results, err := store.Search(tctx, queryEmbedding, 5)
 		if err != nil {
+			logger.Error("Tool failed during Database Search", slog.Any("error", err))
 			return SearchVectorStoreResults{Error: "failed to search vector store"}, nil
 		}
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/domain"
+	"github.com/google/uuid"
 	"github.com/qdrant/go-client/qdrant"
 )
 
@@ -86,12 +87,17 @@ func (s *QdrantStore) Upsert(ctx context.Context, chunks []domain.Chunk) error {
 			payload[k] = v
 		}
 
+		payloadMap, err := qdrant.TryValueMap(payload)
+		if err != nil {
+			s.logger.Error("failed to map payload for chunk, skipping", slog.String("chunk_id", chunk.ID), slog.Any("error", err))
+			continue
+		}
+
 		point := &qdrant.PointStruct{
-			// Note: Qdrant requires IDs to be UUIDs. Chunk.ID must be a valid RFC4122 string
-			// generated during ingestion.
-			Id:      qdrant.NewIDUUID(chunk.ID),
+			// Convert arbitrary string ID to a valid RFC4122 UUID deterministically
+			Id:      qdrant.NewIDUUID(uuid.NewMD5(uuid.NameSpaceURL, []byte(chunk.ID)).String()),
 			Vectors: qdrant.NewVectors(chunk.Embedding...),
-			Payload: qdrant.NewValueMap(payload),
+			Payload: payloadMap,
 		}
 		points = append(points, point)
 	}
@@ -151,6 +157,8 @@ func (s *QdrantStore) Search(ctx context.Context, queryEmbedding []float32, topK
 
 		results = append(results, chunk)
 	}
+
+	print(results)
 
 	return results, nil
 }
