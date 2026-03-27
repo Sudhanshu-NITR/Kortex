@@ -80,7 +80,7 @@ func (s *IndexService) IndexRepository(ctx context.Context, repoPath string) err
 	}
 
 	// 4. Store in Vector Database
-	if err := s.store.Uspert(ctx, allChunks); err != nil {
+	if err := s.store.Upsert(ctx, allChunks); err != nil {
 		s.logger.Error("Failed to upsert chunks to vector db", slog.Any("error", err))
 		return fmt.Errorf("Failed to upsert chunks: %w", err)
 	}

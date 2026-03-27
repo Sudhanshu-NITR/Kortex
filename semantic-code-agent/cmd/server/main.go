@@ -13,6 +13,7 @@ import (
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/app"
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/config"
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/logger"
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -20,6 +21,11 @@ func main() {
 	cfg := config.MustLoad()
 
 	log := logger.New(cfg.Env)
+
+	// Load secrets from .env file into the system's Environment
+	if err := godotenv.Load(); err != nil {
+		log.Warn("No .env file found; assuming variables are already exported")
+	}
 
 	router := api.NewRouter(log)
 
