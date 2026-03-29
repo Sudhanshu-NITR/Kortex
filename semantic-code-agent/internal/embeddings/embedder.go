@@ -38,37 +38,53 @@ func (e *GeminiEmbedder) EmbedChunks(ctx context.Context, chunks []domain.Chunk)
 
 	e.logger.Info("Generating embeddings with Gemini", slog.Int("chunk_count", len(chunks)), slog.String("model", e.model))
 
-	var contents []*genai.Content
-	for _, chunk := range chunks {
-		// Prepare the content structure expected by GenAI EmbedContent
-		contents = append(contents, &genai.Content{
-			Parts: []*genai.Part{
-				genai.NewPartFromText(chunk.Content),
-			},
-		})
+	// TODO: This needs to be worked upon
+	const batchSize = 100
+	const maxChars = 8000 // Roughly 2000 tokens
+
+	for i := 0; i < len(chunks); i += batchSize {
+		end := i + batchSize
+		if end > len(chunks) {
+			end = len(chunks)
+		}
+
+		batch := chunks[i:end]
+		var contents []*genai.Content
+		for _, chunk := range batch {
+			content := chunk.Content
+			if len(content) > maxChars {
+				e.logger.Warn("Truncating chunk for embedding due to token limit", slog.String("id", chunk.ID), slog.Int("original_len", len(content)))
+				content = content[:maxChars]
+			}
+			contents = append(contents, &genai.Content{
+				Parts: []*genai.Part{
+					genai.NewPartFromText(content),
+				},
+			})
+		}
+
+		// Make the API request to Gemini
+		dim := int32(768)
+		config := &genai.EmbedContentConfig{
+			TaskType:             "RETRIEVAL_DOCUMENT",
+			OutputDimensionality: &dim,
+		}
+		resp, err := e.client.Models.EmbedContent(ctx, e.model, contents, config)
+		if err != nil {
+			e.logger.Error("Gemini EmbedContent API request failed", slog.Any("error", err), slog.Int("batch_start", i))
+			return nil, fmt.Errorf("gemini api request failed at batch %d: %w", i, err)
+		}
+
+		if len(resp.Embeddings) != len(batch) {
+			return nil, fmt.Errorf("embedding mismatch in batch %d: expected %d, got %d", i, len(batch), len(resp.Embeddings))
+		}
+
+		for j := range batch {
+			chunks[i+j].Embedding = resp.Embeddings[j].Values
+		}
 	}
 
-	// Make the API request to Gemini
-	dim := int32(768)
-	config := &genai.EmbedContentConfig{
-		TaskType:             "RETRIEVAL_DOCUMENT",
-		OutputDimensionality: &dim,
-	}
-	resp, err := e.client.Models.EmbedContent(ctx, e.model, contents, config)
-	if err != nil {
-		e.logger.Error("Gemini EmbedContent API request failed", slog.Any("error", err))
-		return nil, fmt.Errorf("gemini api request failed: %w", err)
-	}
-
-	if len(resp.Embeddings) != len(chunks) {
-		return nil, fmt.Errorf("embedding mismatch: expected %d embeddings, got %d", len(chunks), len(resp.Embeddings))
-	}
-
-	e.logger.Info("Successfully generated Gemini embeddings", slog.Int("chunk_count", len(chunks)))
-	for i := range chunks {
-		chunks[i].Embedding = resp.Embeddings[i].Values
-	}
-
+	e.logger.Info("Successfully generated Gemini embeddings", slog.Int("results_count", len(chunks)))
 	return chunks, nil
 }
 

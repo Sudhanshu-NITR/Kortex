@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/domain"
 	"github.com/Sudhanshu-NITR/Kortex/semantic-code-agent/internal/embeddings"
@@ -60,7 +61,7 @@ func (s *IndexService) IndexRepository(ctx context.Context, repoPath string) err
 	s.logger.Info("Finishing chunking", slog.Int("total_chunks", len(allChunks)))
 
 	// 3. Generate embeddings in batches (e.g., 100 chunks at a time to prevent API )
-	batchSize := 100
+	batchSize := 10
 	for i := 0; i < len(allChunks); i += batchSize {
 		end := i + batchSize
 		if end > len(allChunks) {
@@ -68,15 +69,43 @@ func (s *IndexService) IndexRepository(ctx context.Context, repoPath string) err
 		}
 
 		batch := allChunks[i:end]
-		embeddedBatch, err := s.embedder.EmbedChunks(ctx, batch)
+		var embeddedBatch []domain.Chunk
+		var err error
+
+		maxRetries := 5
+
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			embeddedBatch, err = s.embedder.EmbedChunks(ctx, batch)
+			if err == nil {
+				break
+			}
+
+			s.logger.Warn("Embedding failed, retrying...",
+				slog.Int("attempt", attempt+1),
+				slog.Int("start", i),
+				slog.Int("end", end),
+				slog.Any("error", err),
+			)
+
+			// Exponential backoff: 1s, 2s, 4s, 8s...
+			time.Sleep(time.Duration(1<<attempt) * time.Second)
+		}
+
 		if err != nil {
-			s.logger.Error("Failed to embed batch", slog.Int("start", i), slog.Int("end", end), slog.Any("error", err))
+			s.logger.Error("Failed to embed batch after retries",
+				slog.Int("start", i),
+				slog.Int("end", end),
+				slog.Any("error", err),
+			)
+			continue
 		}
 
 		// Update the main slice with the generated vectors
 		for j, chunk := range embeddedBatch {
 			allChunks[i+j] = chunk
 		}
+
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	// 4. Store in Vector Database (only valid embedded chunks)

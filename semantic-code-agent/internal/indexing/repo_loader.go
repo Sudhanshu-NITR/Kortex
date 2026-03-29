@@ -25,7 +25,7 @@ func NewRepoLoader(logger *slog.Logger) *RepoLoader {
 		},
 		IgnoredExts: map[string]bool{
 			".exe": true, ".dll": true, ".png": true, ".jpg": true, ".pdf": true,
-			".zip": true, ".tar.gz": true, ".min.js": true,
+			".zip": true, ".tar.gz": true, ".min.js": true, ".json": true, ".ico": true,
 		},
 		logger: logger,
 	}

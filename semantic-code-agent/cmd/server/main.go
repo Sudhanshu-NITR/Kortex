@@ -36,7 +36,9 @@ func main() {
 	}
 
 	// 2. Initialize unified Google GenAI Client
-	aiClient, err := genai.NewClient(context.Background(), &genai.ClientConfig{})
+	aiClient, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		HTTPOptions: genai.HTTPOptions{APIVersion: "v1beta"},
+	})
 	if err != nil {
 		log.Error("Failed to initialize Google GenAI client", "error", err)
 		os.Exit(1)
